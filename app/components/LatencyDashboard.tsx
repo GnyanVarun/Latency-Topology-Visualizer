@@ -1,109 +1,92 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import LatencyChart from "./LatencyChart";
-import LatencyGlobe from "./LatencyGlobe";
+import React, { useState, useEffect } from "react";
+import HistoricalChart from "./HistoricalChart";
 
+interface LatencyDashboardProps {
+  latencyData: Record<string, number>;
+  loading?: boolean;
+  onRegionChange?: (regions: string[]) => void;
+}
 
-type LatencyData = {
-  region: string;
-  latency: number;
-  timestamp: string;
-};
+export default function LatencyDashboard({
+  latencyData,
+  loading = false,
+  onRegionChange,
+}: LatencyDashboardProps) {
+  const [selectedRegions, setSelectedRegions] = useState<string[]>([
+    "AWS",
+    "GCP",
+    "Azure",
+  ]);
 
-export default function LatencyDashboard() {
-  const [data, setData] = useState<LatencyData[]>([]);
-  const [activeRegions, setActiveRegions] = useState<string[]>(["Asia", "US", "EU"]);
-  const regions = ["pingAsia", "pingUS", "pingEU"];
-  <LatencyGlobe activeRegions={activeRegions} />
-
-  const fetchLatency = async () => {
-    try {
-      const results = await Promise.all(
-        regions.map(async (region) => {
-          const res = await fetch(`/api/${region}`);
-          return res.json();
-        })
-      );
-      setData(results);
-    } catch (err) {
-      console.error("Error fetching latency:", err);
-    }
-  };
-
+  // 🔔 Notify parent when selected regions change
   useEffect(() => {
-    fetchLatency();
-    const interval = setInterval(fetchLatency, 5000);
-    return () => clearInterval(interval);
-  }, []);
+    onRegionChange?.(selectedRegions);
+  }, [selectedRegions, onRegionChange]);
 
-  const handleRegionToggle = (region: string) => {
-    setActiveRegions((prev) =>
-      prev.includes(region) ? prev.filter((r) => r !== region) : [...prev, region]
+  const toggleRegion = (region: string) => {
+    setSelectedRegions((prev) =>
+      prev.includes(region)
+        ? prev.filter((r) => r !== region)
+        : [...prev, region]
     );
   };
 
-  const filteredData = data.filter((item) => activeRegions.includes(item.region));
-
   return (
-    <div style={{ padding: "2rem", color: "white" }}>
-      <h1 style={{ textAlign: "center", marginBottom: "1.5rem" }}>
-        🌐 Real-time Latency Dashboard
-      </h1>
+    <div
+      style={{
+        padding: "1rem",
+        color: "white",
+        backgroundColor: "rgba(0,0,0,0.5)",
+        borderRadius: "1rem",
+        width: "320px",
+        margin: "1rem",
+        fontFamily: "sans-serif",
+      }}
+    >
+      <h2 style={{ fontSize: "1.5rem", marginBottom: "1rem" }}>
+        ☁️ Cloud Latency Dashboard
+      </h2>
 
-      {/* Region Filters */}
-      <div style={{ display: "flex", justifyContent: "center", gap: "1rem", marginBottom: "1rem" }}>
-        {["Asia", "US", "EU"].map((region) => (
-          <label key={region} style={{ cursor: "pointer" }}>
-            <input
-              type="checkbox"
-              checked={activeRegions.includes(region)}
-              onChange={() => handleRegionToggle(region)}
-              style={{ marginRight: "8px" }}
-            />
-            {region}
-          </label>
-        ))}
+      {loading ? (
+        <p style={{ color: "lightgray" }}>Loading latency data...</p>
+      ) : (
+        Object.entries(latencyData).map(([region, value]) => (
+          <div
+            key={region}
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: "0.5rem",
+            }}
+          >
+            <button
+              onClick={() => toggleRegion(region)}
+              style={{
+                padding: "0.4rem 1rem",
+                border: "none",
+                borderRadius: "0.5rem",
+                backgroundColor: selectedRegions.includes(region)
+                  ? "limegreen"
+                  : "gray",
+                color: "white",
+                cursor: "pointer",
+                fontWeight: "bold",
+                transition: "background-color 0.2s ease",
+              }}
+            >
+              {region}
+            </button>
+            <span>{value ? `${value.toFixed(0)} ms` : "--"}</span>
+          </div>
+        ))
+      )}
+
+      <div style={{ marginTop: "1rem" }}>
+        <HistoricalChart data={latencyData} />
       </div>
-
-      {/* Chart Section */}
-      <div style={{ marginBottom: "2rem" }}>
-        <LatencyChart activeRegions={activeRegions} />
-      </div>
-
-      {/* Table Section */}
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr>
-            <th style={{ borderBottom: "1px solid gray", textAlign: "left", padding: "10px" }}>Region</th>
-            <th style={{ borderBottom: "1px solid gray", textAlign: "left", padding: "10px" }}>Latency (ms)</th>
-            <th style={{ borderBottom: "1px solid gray", textAlign: "left", padding: "10px" }}>Timestamp</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredData.map((item) => (
-            <tr key={item.region}>
-              <td style={{ padding: "10px" }}>{item.region}</td>
-              <td
-                style={{
-                  padding: "10px",
-                  color:
-                    item.latency < 80
-                      ? "lightgreen"
-                      : item.latency < 120
-                      ? "yellow"
-                      : "red",
-                }}
-              >
-                {item.latency}
-              </td>
-              <td style={{ padding: "10px" }}>
-                {new Date(item.timestamp).toLocaleTimeString()}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   );
 }

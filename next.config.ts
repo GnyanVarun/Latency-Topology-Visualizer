@@ -1,8 +1,10 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  reactStrictMode: true,
+  //output: 'export', // 👈 enables static export (creates /out)
+  images: {
+    unoptimized: true, // required for static hosting like Firebase
+  },
 };
 
 export default nextConfig;

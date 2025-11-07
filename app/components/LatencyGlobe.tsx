@@ -1,51 +1,37 @@
 "use client";
 
 import React, { useEffect, useRef } from "react";
+import { cloudRegions, CloudRegion } from "./data/cloudRegions";
 
 interface LatencyGlobeProps {
-  activeRegions?: string[];
+  activeRegions: string[];
+  latencyData: Record<string, number>;
 }
 
-type RegionKey = "Asia" | "US" | "EU";
-
-const NORMALIZE: Record<string, RegionKey> = {
-  Asia: "Asia",
-  US: "US",
-  EU: "EU",
-  pingAsia: "Asia",
-  pingUS: "US",
-  pingEU: "EU",
-};
-
 export default function LatencyGlobe({
-  activeRegions = ["Asia", "US", "EU"],
+  activeRegions,
+  latencyData,
 }: LatencyGlobeProps) {
-  const globeRef = useRef<HTMLDivElement | null>(null);
-  const globeInstanceRef = useRef<any | null>(null);
+  const globeContainerRef = useRef<HTMLDivElement | null>(null);
+  const globeInstanceRef = useRef<any>(null);
 
-  const regions: Record<RegionKey, { lat: number; lng: number }> = {
-    Asia: { lat: 1.3521, lng: 103.8198 }, // Singapore
-    US: { lat: 37.7749, lng: -122.4194 }, // San Francisco
-    EU: { lat: 52.52, lng: 13.405 }, // Berlin
-  };
-
-  const normalizeList = (list: string[]) =>
-    Array.from(
-      new Set(list.map((r) => NORMALIZE[r] || (r as RegionKey)))
-    ).filter(Boolean) as RegionKey[];
-
-  // --- Initialize Globe ---
+  // 🟢 Initialize the globe once
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (!globeRef.current) return;
-
+    if (typeof window === "undefined" || !globeContainerRef.current) return;
     let mounted = true;
 
     import("globe.gl").then((mod) => {
-      if (!mounted || !globeRef.current) return;
-
+      if (!mounted || !globeContainerRef.current) return;
       const Globe = mod.default;
-      const globe = new Globe(globeRef.current);
+      const globe = new Globe(globeContainerRef.current);
+
+      // Map cloudRegions -> globe points
+      const points = cloudRegions.map((region: CloudRegion) => ({
+        name: region.name,
+        lat: region.lat,
+        lng: region.lng,
+        color: region.color,
+      }));
 
       globe
         .globeImageUrl("//unpkg.com/three-globe/example/img/earth-dark.jpg")
@@ -53,111 +39,85 @@ export default function LatencyGlobe({
         .showAtmosphere(true)
         .atmosphereColor("lightskyblue")
         .atmosphereAltitude(0.25)
-        .pointOfView({ lat: 20, lng: 0, altitude: 2.3 })
+        .pointOfView({ lat: 20, lng: 0, altitude: 2.2 })
+        .pointsData(points)
+        .pointColor((d: any) => d.color)
         .pointAltitude(0.05)
         .pointLabel((d: any) => d.name);
-
-      // --- Initial Points ---
-      const exchanges = (Object.keys(regions) as RegionKey[]).map((name) => ({
-        name,
-        lat: regions[name].lat,
-        lng: regions[name].lng,
-        color:
-          name === "Asia" ? "orange" : name === "US" ? "lightgreen" : "skyblue",
-      }));
-
-      globe.pointsData(exchanges).pointColor((d: any) => d.color);
-
-      // --- Animated Arcs (always render at least once) ---
-      const arcs = [
-        { start: "Asia", end: "US", color: ["orange", "lightgreen"] },
-        { start: "US", end: "EU", color: ["lightgreen", "skyblue"] },
-        { start: "EU", end: "Asia", color: ["skyblue", "orange"] },
-      ].map((a) => ({
-        startLat: regions[a.start as RegionKey].lat,
-        startLng: regions[a.start as RegionKey].lng,
-        endLat: regions[a.end as RegionKey].lat,
-        endLng: regions[a.end as RegionKey].lng,
-        color: a.color,
-      }));
-
-      globe
-        .arcsData(arcs)
-        .arcColor((d: any) => d.color)
-        .arcAltitude(0.3)
-        .arcStroke(0.7)
-        .arcDashLength(0.4)
-        .arcDashGap(0.2)
-        .arcDashInitialGap(() => Math.random())
-        .arcDashAnimateTime(4000); // 4s looping animation
 
       globeInstanceRef.current = globe;
     });
 
     return () => {
       mounted = false;
-      if (globeRef.current) globeRef.current.innerHTML = "";
+      if (globeContainerRef.current) globeContainerRef.current.innerHTML = "";
       globeInstanceRef.current = null;
     };
   }, []);
 
-  // --- Update arcs dynamically when activeRegions changes ---
+  // 🔁 Update arcs dynamically when activeRegions or latencyData change
   useEffect(() => {
     const globe = globeInstanceRef.current;
-    if (!globe) return;
+    if (!globe || typeof globe.arcsData !== "function") return;
 
-    const active = normalizeList(activeRegions || []);
+    // Filter active region objects with strong typing
+    const activeRegionObjects: CloudRegion[] = cloudRegions.filter(
+      (r: CloudRegion) => activeRegions.includes(r.provider)
+    );
 
-    // Build points for visible regions
-    const points = (Object.keys(regions) as RegionKey[])
-      .map((name) => ({
-        name,
-        lat: regions[name].lat,
-        lng: regions[name].lng,
-        color:
-          name === "Asia" ? "orange" : name === "US" ? "lightgreen" : "skyblue",
-        visible: active.includes(name),
-      }))
-      .filter((p) => p.visible);
+    // Build arcs between every pair of active regions
+    const arcs = [] as Array<{
+      startLat: number;
+      startLng: number;
+      endLat: number;
+      endLng: number;
+      color: string[] | string;
+    }>;
 
-    globe.pointsData(points);
+    for (let i = 0; i < activeRegionObjects.length; i++) {
+      for (let j = i + 1; j < activeRegionObjects.length; j++) {
+        const a = activeRegionObjects[i];
+        const b = activeRegionObjects[j];
 
-    // Build arcs between active regions only
-    const allArcs = [
-      { start: "Asia", end: "US", color: ["orange", "lightgreen"] },
-      { start: "US", end: "EU", color: ["lightgreen", "skyblue"] },
-      { start: "EU", end: "Asia", color: ["skyblue", "orange"] },
-    ] as { start: RegionKey; end: RegionKey; color: string[] }[];
+        const latencyA = latencyData[a.provider] ?? 100;
+        const latencyB = latencyData[b.provider] ?? 100;
+        const avgLatency = (latencyA + latencyB) / 2;
 
-    const visibleArcs = allArcs
-      .filter((a) => active.includes(a.start) && active.includes(a.end))
-      .map((a) => ({
-        startLat: regions[a.start].lat,
-        startLng: regions[a.start].lng,
-        endLat: regions[a.end].lat,
-        endLng: regions[a.end].lng,
-        color: a.color,
-      }));
+        const color =
+          avgLatency < 70
+            ? ["limegreen", "limegreen"]
+            : avgLatency < 100
+            ? ["yellow", "orange"]
+            : ["red", "darkred"];
 
-    // ✅ ensure arcs visible again after re-renders
+        arcs.push({
+          startLat: a.lat,
+          startLng: a.lng,
+          endLat: b.lat,
+          endLng: b.lng,
+          color,
+        });
+      }
+    }
+
+    // Apply arcs and animation styles
     globe
-      .arcsData(visibleArcs)
+      .arcsData(arcs)
       .arcColor((d: any) => d.color)
       .arcAltitude(0.3)
-      .arcStroke(0.7)
+      .arcStroke(0.8)
       .arcDashLength(0.4)
       .arcDashGap(0.2)
       .arcDashInitialGap(() => Math.random())
       .arcDashAnimateTime(4000);
-  }, [activeRegions]);
+  }, [activeRegions, latencyData]);
 
   return (
     <div
-      ref={globeRef}
+      ref={globeContainerRef}
       style={{
         width: "100%",
         height: "100%",
-        minHeight: 480,
         background: "black",
       }}
     />
