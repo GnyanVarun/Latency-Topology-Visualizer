@@ -34,3 +34,20 @@ export const cloudRegions: CloudRegion[] = [
   { name: "Azure Southeast Asia (Singapore)", provider: "Azure", lat: 1.3521, lng: 103.8198, color: "skyblue", size: 0.3 },
   { name: "Azure Japan East (Tokyo)", provider: "Azure", lat: 35.6762, lng: 139.6503, color: "skyblue", size: 0.3 },
 ];
+
+// -------- Exchange Servers --------
+export interface ExchangeServer {
+  name: string;
+  provider: "AWS" | "GCP" | "Azure";
+  lat: number;
+  lng: number;
+  color: string;
+  size: number;
+}
+
+export const exchangeServers: ExchangeServer[] = [
+  { name: "Binance", provider: "AWS", lat: 22.3193, lng: 114.1694, color: "orange", size: 0.45 },
+  { name: "OKX", provider: "GCP", lat: 1.2801, lng: 103.8500, color: "lightgreen", size: 0.45 },
+  { name: "Bybit", provider: "Azure", lat: 35.6895, lng: 139.6917, color: "skyblue", size: 0.45 },
+  { name: "Deribit", provider: "AWS", lat: 52.3676, lng: 4.9041, color: "orange", size: 0.45 },
+];

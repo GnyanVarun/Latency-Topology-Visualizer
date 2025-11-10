@@ -2,36 +2,55 @@
 
 import React, { useEffect, useRef } from "react";
 import { cloudRegions, CloudRegion } from "./data/cloudRegions";
+import { exchangeServers, ExchangeServer } from "./data/exchangeServers";
 
 interface LatencyGlobeProps {
   activeRegions: string[];
   latencyData: Record<string, number>;
 }
 
-export default function LatencyGlobe({
-  activeRegions,
-  latencyData,
-}: LatencyGlobeProps) {
+export default function LatencyGlobe({ activeRegions, latencyData }: LatencyGlobeProps) {
   const globeContainerRef = useRef<HTMLDivElement | null>(null);
   const globeInstanceRef = useRef<any>(null);
 
-  // 🟢 Initialize the globe once
+  // 🌍 Initialize globe
   useEffect(() => {
     if (typeof window === "undefined" || !globeContainerRef.current) return;
     let mounted = true;
 
     import("globe.gl").then((mod) => {
       if (!mounted || !globeContainerRef.current) return;
+
       const Globe = mod.default;
       const globe = new Globe(globeContainerRef.current);
 
-      // Map cloudRegions -> globe points
-      const points = cloudRegions.map((region: CloudRegion) => ({
-        name: region.name,
-        lat: region.lat,
-        lng: region.lng,
-        color: region.color,
+      // 🟦 Prepare cloud region points
+      const cloudPoints = cloudRegions.map((r: CloudRegion) => ({
+        name: `${r.name} (${r.provider})`,
+        lat: r.lat,
+        lng: r.lng,
+        color:
+          r.provider === "AWS"
+            ? "orange"
+            : r.provider === "GCP"
+            ? "limegreen"
+            : "deepskyblue",
       }));
+
+      // 🟢 Prepare exchange server points
+      const exchangePoints = exchangeServers.map((e: ExchangeServer) => ({
+        name: `${e.name} (${e.location})`,
+        lat: e.lat,
+        lng: e.lng,
+        color:
+          e.provider === "AWS"
+            ? "gold"
+            : e.provider === "GCP"
+            ? "cyan"
+            : "violet",
+      }));
+
+      const allPoints = [...cloudPoints, ...exchangePoints];
 
       globe
         .globeImageUrl("//unpkg.com/three-globe/example/img/earth-dark.jpg")
@@ -40,7 +59,7 @@ export default function LatencyGlobe({
         .atmosphereColor("lightskyblue")
         .atmosphereAltitude(0.25)
         .pointOfView({ lat: 20, lng: 0, altitude: 2.2 })
-        .pointsData(points)
+        .pointsData(allPoints)
         .pointColor((d: any) => d.color)
         .pointAltitude(0.05)
         .pointLabel((d: any) => d.name);
@@ -55,71 +74,99 @@ export default function LatencyGlobe({
     };
   }, []);
 
-  // 🔁 Update arcs dynamically when activeRegions or latencyData change
+  // 🔁 Animated latency arcs (pulsing)
   useEffect(() => {
     const globe = globeInstanceRef.current;
     if (!globe || typeof globe.arcsData !== "function") return;
 
-    // Filter active region objects with strong typing
-    const activeRegionObjects: CloudRegion[] = cloudRegions.filter(
-      (r: CloudRegion) => activeRegions.includes(r.provider)
-    );
+    const arcs: any[] = [];
 
-    // Build arcs between every pair of active regions
-    const arcs = [] as Array<{
-      startLat: number;
-      startLng: number;
-      endLat: number;
-      endLng: number;
-      color: string[] | string;
-    }>;
+    exchangeServers.forEach((ex) => {
+      // Filter for same provider or nearby 2 cloud regions
+      const nearbyRegions = cloudRegions
+        .filter((r) => r.provider === ex.provider)
+        .slice(0, 2);
 
-    for (let i = 0; i < activeRegionObjects.length; i++) {
-      for (let j = i + 1; j < activeRegionObjects.length; j++) {
-        const a = activeRegionObjects[i];
-        const b = activeRegionObjects[j];
-
-        const latencyA = latencyData[a.provider] ?? 100;
-        const latencyB = latencyData[b.provider] ?? 100;
-        const avgLatency = (latencyA + latencyB) / 2;
-
+      nearbyRegions.forEach((r) => {
+        const latency = latencyData[r.provider] ?? 100;
         const color =
-          avgLatency < 70
+          latency < 70
             ? ["limegreen", "limegreen"]
-            : avgLatency < 100
+            : latency < 100
             ? ["yellow", "orange"]
             : ["red", "darkred"];
 
         arcs.push({
-          startLat: a.lat,
-          startLng: a.lng,
-          endLat: b.lat,
-          endLng: b.lng,
+          startLat: ex.lat,
+          startLng: ex.lng,
+          endLat: r.lat,
+          endLng: r.lng,
           color,
         });
-      }
-    }
+      });
+    });
 
-    // Apply arcs and animation styles
     globe
       .arcsData(arcs)
       .arcColor((d: any) => d.color)
-      .arcAltitude(0.3)
+      .arcAltitude(0.25)
       .arcStroke(0.8)
       .arcDashLength(0.4)
       .arcDashGap(0.2)
       .arcDashInitialGap(() => Math.random())
-      .arcDashAnimateTime(4000);
+      .arcDashAnimateTime(3000); // ⏳ Faster pulsing arcs
   }, [activeRegions, latencyData]);
 
   return (
     <div
-      ref={globeContainerRef}
       style={{
+        position: "relative",
         width: "100%",
         height: "100%",
         background: "black",
+        borderRadius: "1rem",
+        overflow: "hidden",
       }}
-    />
+    >
+      {/* 🌐 Globe */}
+      <div ref={globeContainerRef} style={{ width: "100%", height: "100%" }} />
+
+      {/* 🧭 Legend Overlay */}
+      <div
+        style={{
+          position: "absolute",
+          bottom: "20px",
+          left: "20px",
+          background: "rgba(0, 0, 0, 0.6)",
+          padding: "10px 14px",
+          borderRadius: "8px",
+          color: "white",
+          fontSize: "0.9rem",
+          lineHeight: "1.4",
+        }}
+      >
+        <strong style={{ fontSize: "1rem" }}>Legend</strong>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 6 }}>
+          <span>
+            <span style={{ color: "orange" }}>●</span> AWS Cloud Region
+          </span>
+          <span>
+            <span style={{ color: "limegreen" }}>●</span> GCP Cloud Region
+          </span>
+          <span>
+            <span style={{ color: "deepskyblue" }}>●</span> Azure Cloud Region
+          </span>
+          <span>
+            <span style={{ color: "gold" }}>●</span> AWS Exchange Server
+          </span>
+          <span>
+            <span style={{ color: "cyan" }}>●</span> GCP Exchange Server
+          </span>
+          <span>
+            <span style={{ color: "violet" }}>●</span> Azure Exchange Server
+          </span>
+        </div>
+      </div>
+    </div>
   );
 }
