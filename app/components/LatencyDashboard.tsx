@@ -4,6 +4,8 @@ import React, { useEffect, useState, useMemo } from "react";
 import HistoricalChart from "./HistoricalChart";
 
 interface LatencyDashboardProps {
+  latencyData?: Record<string, number>;
+  loading?: boolean; // ✅ Add this line
   onRegionChange?: (regions: string[]) => void;
   onLatencyChange?: (data: Record<string, number>) => void;
 }
